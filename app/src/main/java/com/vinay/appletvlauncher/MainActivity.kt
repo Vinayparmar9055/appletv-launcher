@@ -2,6 +2,7 @@ package com.vinay.appletvlauncher
 
 import android.Manifest
 import android.app.Activity
+import android.app.role.RoleManager
 import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -15,6 +16,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -54,6 +56,24 @@ class MainActivity : Activity() {
                 or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
         setContentView(buildUi())
+        if (savedInstanceState == null) askDefaultHome()
+    }
+
+    private fun askDefaultHome() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                val rm = getSystemService(RoleManager::class.java)
+                if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                    if (!rm.isRoleHeld(RoleManager.ROLE_HOME)) {
+                        startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_HOME), 88)
+                    }
+                    return
+                }
+            }
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Default home ka option nahi mila", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onResume() {
