@@ -2,8 +2,8 @@ package com.vinay.appletvlauncher
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.Typeface
@@ -22,6 +22,7 @@ import android.widget.TextView
 import android.widget.Toast
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Calendar
 
 class MainActivity : Activity() {
 
@@ -29,8 +30,8 @@ class MainActivity : Activity() {
 
     private lateinit var row: LinearLayout
     private lateinit var scroll: HorizontalScrollView
-    private lateinit var bigIcon: ImageView
-    private lateinit var bigName: TextView
+    private lateinit var nameLabel: TextView
+    private lateinit var greetingTv: TextView
     private lateinit var wallpaperView: ImageView
     private val PICK = 1001
     private val wpFile by lazy { File(filesDir, "wallpaper.jpg") }
@@ -48,10 +49,10 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        updateGreeting()
         loadApps()
     }
 
-    // Home screen par back dabane se kuch nahi hoga
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {}
 
@@ -63,11 +64,22 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun glass(radius: Int, alpha: Int): GradientDrawable =
+    private fun glass(radius: Int, alpha: Int, border: Int = 70): GradientDrawable =
         GradientDrawable().apply {
             cornerRadius = dp(radius).toFloat()
             setColor(Color.argb(alpha, 255, 255, 255))
+            setStroke(dp(1), Color.argb(border, 255, 255, 255))
         }
+
+    private fun updateGreeting() {
+        val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val g = when {
+            h < 12 -> "Good morning"
+            h < 17 -> "Good afternoon"
+            else -> "Good evening"
+        }
+        greetingTv.text = "$g, Vinay"
+    }
 
     private fun buildUi(): View {
         val root = FrameLayout(this)
@@ -78,73 +90,67 @@ class MainActivity : Activity() {
 
         wallpaperView = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         root.addView(wallpaperView, FrameLayout.LayoutParams(-1, -1))
-        val dim = View(this).apply { setBackgroundColor(Color.argb(90, 0, 0, 0)) }
+        val dim = View(this).apply { setBackgroundColor(Color.argb(70, 0, 0, 0)) }
         root.addView(dim, FrameLayout.LayoutParams(-1, -1))
         applyWallpaper()
 
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(48), dp(32), dp(48), dp(32))
+            setPadding(dp(40), dp(28), dp(40), dp(28))
         }
         root.addView(col, FrameLayout.LayoutParams(-1, -1))
 
-        // Upar: time aur date
-        val top = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        col.addView(top, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // Left card: greeting, time, date
+        val left = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
+            background = glass(28, 40)
+            setPadding(dp(36), dp(24), dp(36), dp(24))
+        }
+        greetingTv = TextView(this).apply {
+            setTextColor(Color.argb(220, 255, 255, 255))
+            textSize = 22f
         }
         val time = TextClock(this).apply {
             format12Hour = "h:mm a"
             format24Hour = "h:mm a"
             setTextColor(Color.WHITE)
-            textSize = 34f
+            textSize = 64f
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
         }
-        val spacer = View(this)
         val date = TextClock(this).apply {
             format12Hour = "EEEE, d MMMM"
             format24Hour = "EEEE, d MMMM"
-            setTextColor(Color.argb(200, 255, 255, 255))
-            textSize = 20f
+            setTextColor(Color.argb(220, 255, 255, 255))
+            textSize = 22f
         }
-        top.addView(time)
-        top.addView(spacer, LinearLayout.LayoutParams(0, 1, 1f))
-        top.addView(date)
-        col.addView(top, LinearLayout.LayoutParams(-1, -2))
+        left.addView(greetingTv)
+        left.addView(time)
+        left.addView(date)
+        top.addView(left, LinearLayout.LayoutParams(0, -1, 1.3f).apply { rightMargin = dp(20) })
 
-        // Beech me: bada glass card
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = glass(28, 38)
-            setPadding(dp(40), dp(24), dp(40), dp(24))
-        }
-        bigIcon = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
-        card.addView(bigIcon, LinearLayout.LayoutParams(dp(120), dp(120)))
-        val texts = LinearLayout(this).apply {
+        // Middle card: analog clock
+        val clockCard = FrameLayout(this).apply { background = glass(28, 40) }
+        clockCard.addView(
+            AnalogClockView(this),
+            FrameLayout.LayoutParams(dp(200), dp(200), Gravity.CENTER)
+        )
+        top.addView(clockCard, LinearLayout.LayoutParams(0, -1, 0.9f).apply { rightMargin = dp(20) })
+
+        // Right card: wallpaper
+        top.addView(makeWallpaperCard(), LinearLayout.LayoutParams(0, -1, 1f))
+
+        // Dock
+        val dockBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(32), 0, 0, 0)
+            background = glass(32, 35)
+            setPadding(dp(16), dp(8), dp(16), dp(14))
+            clipChildren = false
+            clipToPadding = false
         }
-        bigName = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            textSize = 40f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-        val hint = TextView(this).apply {
-            text = "Kholne ke liye OK dabao"
-            setTextColor(Color.argb(180, 255, 255, 255))
-            textSize = 18f
-        }
-        texts.addView(bigName)
-        texts.addView(hint)
-        card.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
-        card.addView(AnalogClockView(this), LinearLayout.LayoutParams(dp(170), dp(170)))
-        val cardLp = LinearLayout.LayoutParams(-1, 0, 1f).apply {
-            topMargin = dp(24); bottomMargin = dp(24)
-        }
-        col.addView(card, cardLp)
-
-        // Neeche: apps ki row
         scroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             clipChildren = false
@@ -153,10 +159,17 @@ class MainActivity : Activity() {
         row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             clipChildren = false
-            setPadding(dp(8), dp(24), dp(8), dp(24))
+            setPadding(dp(8), dp(18), dp(8), dp(18))
         }
         scroll.addView(row)
-        col.addView(scroll, LinearLayout.LayoutParams(-1, -2))
+        nameLabel = TextView(this).apply {
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            textSize = 20f
+        }
+        dockBox.addView(scroll, LinearLayout.LayoutParams(-1, -2))
+        dockBox.addView(nameLabel, LinearLayout.LayoutParams(-1, -2))
+        col.addView(dockBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
 
         return root
     }
@@ -185,9 +198,8 @@ class MainActivity : Activity() {
         items.sortBy { it.label.lowercase() }
 
         row.removeAllViews()
-        row.addView(makeWallpaperTile())
         for (item in items) row.addView(makeTile(item))
-        (row.getChildAt(1) ?: row.getChildAt(0))?.requestFocus()
+        row.getChildAt(0)?.requestFocus()
     }
 
     private fun applyWallpaper() {
@@ -198,33 +210,43 @@ class MainActivity : Activity() {
         wallpaperView.setImageDrawable(null)
     }
 
-    private fun makeWallpaperTile(): View {
-        val tile = FrameLayout(this).apply {
+    private fun makeWallpaperCard(): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
             isFocusable = true
             isClickable = true
-            background = glass(18, 30)
+            background = glass(28, 40)
         }
-        val tv = TextView(this).apply {
-            text = "Wallpaper\nbadlo"
-            gravity = Gravity.CENTER
+        val icon = ImageView(this).apply {
+            setImageResource(android.R.drawable.ic_menu_gallery)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        card.addView(icon, LinearLayout.LayoutParams(dp(72), dp(72)))
+        val label = TextView(this).apply {
+            text = "Wallpaper badlo"
             setTextColor(Color.WHITE)
-            textSize = 20f
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, 0)
         }
-        tile.addView(tv, FrameLayout.LayoutParams(-1, -1))
-        tile.layoutParams = LinearLayout.LayoutParams(dp(220), dp(124)).apply {
-            leftMargin = dp(12); rightMargin = dp(12)
+        card.addView(label)
+        val hint = TextView(this).apply {
+            text = "OK: photo chuno  |  OK lamba: hatao"
+            setTextColor(Color.argb(180, 255, 255, 255))
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, 0)
         }
-        tile.setOnFocusChangeListener { v, has ->
-            val sc = if (has) 1.18f else 1f
+        card.addView(hint)
+
+        card.setOnFocusChangeListener { v, has ->
+            val sc = if (has) 1.05f else 1f
             v.animate().scaleX(sc).scaleY(sc).setDuration(150).start()
-            v.background = glass(18, if (has) 80 else 30)
-            if (has) {
-                bigIcon.setImageResource(android.R.drawable.ic_menu_gallery)
-                bigName.text = "Wallpaper (gallery se)"
-                scroll.smoothScrollTo(v.left - (scroll.width - v.width) / 2, 0)
-            }
+            v.background = glass(28, if (has) 85 else 40, if (has) 200 else 70)
+            if (has) nameLabel.text = "Wallpaper"
         }
-        tile.setOnClickListener {
+        card.setOnClickListener {
             try {
                 val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
@@ -233,20 +255,22 @@ class MainActivity : Activity() {
                 startActivityForResult(i, PICK)
             } catch (e: Exception) {
                 try {
-                    startActivityForResult(Intent.createChooser(
-                        Intent(Intent.ACTION_GET_CONTENT).setType("image/*"), "Photo chuno"), PICK)
+                    startActivityForResult(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_GET_CONTENT).setType("image/*"), "Photo chuno"
+                        ), PICK
+                    )
                 } catch (e2: Exception) {
                     Toast.makeText(this, "Is TV me gallery/file picker nahi mila", Toast.LENGTH_LONG).show()
                 }
             }
         }
-        // Lamba dabane par wallpaper hata do
-        tile.setOnLongClickListener {
+        card.setOnLongClickListener {
             wpFile.delete(); applyWallpaper()
             Toast.makeText(this, "Wallpaper hata diya", Toast.LENGTH_SHORT).show()
             true
         }
-        return tile
+        return card
     }
 
     @Deprecated("Deprecated in Java")
@@ -295,21 +319,18 @@ class MainActivity : Activity() {
         }
         tile.addView(img, FrameLayout.LayoutParams(-1, -1))
 
-        val lp = LinearLayout.LayoutParams(dp(220), dp(124)).apply {
-            leftMargin = dp(12); rightMargin = dp(12)
+        tile.layoutParams = LinearLayout.LayoutParams(dp(190), dp(108)).apply {
+            leftMargin = dp(10); rightMargin = dp(10)
         }
-        tile.layoutParams = lp
 
         tile.setOnFocusChangeListener { v, has ->
-            val s = if (has) 1.18f else 1f
+            val s = if (has) 1.12f else 1f
             v.animate().scaleX(s).scaleY(s).setDuration(150).start()
             v.elevation = if (has) dp(16).toFloat() else 0f
-            v.background = glass(18, if (has) 80 else 30)
+            v.background = glass(18, if (has) 80 else 30, if (has) 220 else 70)
             if (has) {
-                bigIcon.setImageDrawable(item.icon)
-                bigName.text = item.label
-                val target = v.left - (scroll.width - v.width) / 2
-                scroll.smoothScrollTo(target, 0)
+                nameLabel.text = item.label
+                scroll.smoothScrollTo(v.left - (scroll.width - v.width) / 2, 0)
             }
         }
         tile.setOnClickListener {
