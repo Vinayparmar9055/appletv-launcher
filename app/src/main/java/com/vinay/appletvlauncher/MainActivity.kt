@@ -112,7 +112,6 @@ fun SimpleHomeScreen(onOpenSettings: () -> Unit, onOpenControl: () -> Unit) {
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        // Favourites Dock
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -204,6 +203,27 @@ fun SimpleControl(onBack: () -> Unit) {
     }
 }
 
+fun loadApps(context: Context): List<AppItem> {
+    val pm = context.packageManager
+    val list = mutableListOf<AppItem>()
+    val seen = mutableSetOf<String>()
+    val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+    for (info in pm.queryIntentActivities(intent, 0)) {
+        val pkg = info.activityInfo.packageName
+        if (pkg != context.packageName && seen.add(pkg)) {
+            list.add(AppItem(info.loadLabel(pm).toString(), pkg, info.loadIcon(pm)))
+        }
+    }
+    return list.sortedBy { it.name.lowercase() }
+}
+
+fun launchApp(context: Context, pkg: String) {
+    val intent = context.packageManager.getLaunchIntentForPackage(pkg)
+    intent?.let {
+        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(it)
+    }
+}
 fun loadApps(context: Context): List<AppItem> {
     val pm = context.packageManager
     val list = mutableListOf<AppItem>()
