@@ -527,4 +527,61 @@ class MainActivity : Activity() {
 
         mainCol.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
         rootFrame.addView(ov, FrameLayout.LayoutParams(-1, -1))
+                overlay = ov
+        pr.getChildAt(0)?.requestFocus()
+    }
+
+    private fun hidePicker() {
+        overlay?.let { rootFrame.removeView(it) }
+        overlay = null
+        mainCol.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        row.getChildAt(0)?.requestFocus()
+    }
+
+    private fun makeTile(item: AppItem): View {
+        val tile = FrameLayout(this).apply {
+            isFocusable = true
+            isClickable = true
+            background = glass(tileR, 30)
+            clipToOutline = true
+            outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(v: View, o: Outline) {
+                    o.setRoundRect(0, 0, v.width, v.height, dp(tileR).toFloat())
+                }
+            }
+        }
+        val img = ImageView(this)
+        if (item.banner != null) {
+            img.scaleType = ImageView.ScaleType.CENTER_CROP
+            img.setImageDrawable(item.banner)
+        } else {
+            img.scaleType = ImageView.ScaleType.CENTER_INSIDE
+            img.setPadding(dp(tileW / 7), dp(tileH / 7), dp(tileW / 7), dp(tileH / 7))
+            img.setImageDrawable(item.icon)
+        }
+        tile.addView(img, FrameLayout.LayoutParams(-1, -1))
+
+        tile.layoutParams = LinearLayout.LayoutParams(dp(tileW), dp(tileH)).apply {
+            leftMargin = dp(cgap); rightMargin = dp(cgap)
+        }
+
+        tile.setOnFocusChangeListener { v, has ->
+            val s = if (has) 1.12f else 1f
+            v.animate().scaleX(s).scaleY(s).setDuration(150).start()
+            v.elevation = if (has) dp(16).toFloat() else 0f
+            v.background = glass(tileR, if (has) 80 else 30, 70, has)
+            if (has) {
+                nameLabel.text = item.label
+                scroll.smoothScrollTo(v.left - (scroll.width - v.width) / 2, 0)
+            }
+        }
+        tile.setOnClickListener {
+            val pm = packageManager
+            val intent = pm.getLeanbackLaunchIntentForPackage(item.pkg)
+                ?: pm.getLaunchIntentForPackage(item.pkg)
+            if (intent != null) startActivity(intent)
+        }
+        return tile
+    }
+}
   
