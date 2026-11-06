@@ -44,22 +44,27 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            var screen by remember { mutableStateOf("home") }
+            MainAppContent()
+        }
+    }
+}
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF0A0F1D))
-            ) {
-                when (screen) {
-                    "home" -> HomeScreen(
-                        onSettings = { screen = "settings" },
-                        onControl = { screen = "control" }
-                    )
-                    "settings" -> SettingsScreen(onBack = { screen = "home" })
-                    "control" -> ControlScreen(onBack = { screen = "home" })
-                }
-            }
+@Composable
+fun MainAppContent() {
+    var screen by remember { mutableStateOf("home") }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0A0F1D))
+    ) {
+        when (screen) {
+            "home" -> HomeScreen(
+                onSettings = { screen = "settings" },
+                onControl = { screen = "control" }
+            )
+            "settings" -> SettingsScreen(onBack = { screen = "home" })
+            "control" -> ControlScreen(onBack = { screen = "home" })
         }
     }
 }
