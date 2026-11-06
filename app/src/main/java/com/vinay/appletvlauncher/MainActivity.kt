@@ -137,6 +137,7 @@ fun MenuButton(title: String, onClick: () -> Unit) {
         Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
+
 @Composable
 fun AppTile(app: AppItem, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
