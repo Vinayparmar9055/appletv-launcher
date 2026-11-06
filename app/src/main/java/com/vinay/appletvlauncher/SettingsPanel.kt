@@ -70,6 +70,14 @@ class SettingsPanel(
         list.addView(nameRow(), rowParams())
         list.addView(option("Date aur din", "date", 1, listOf("Off", "On")), rowParams())
 
+        list.addView(section("Wallpaper"))
+        list.addView(option("Wallpaper badalna (slideshow)", "slide", 0, listOf("Band", "30 second", "1 minute", "5 minute", "15 minute", "1 ghanta")), rowParams())
+        list.addView(option("Wallpaper ki dhundhli parat", "wpdim", 2, listOf("Nahi", "Kam", "Medium", "Zyada", "Bahut zyada")), rowParams())
+
+        list.addView(section("Wallpaper"))
+        list.addView(option("Wallpaper ki dhundhli parat", "dim", 1, listOf("Bilkul nahi", "Kam", "Medium", "Zyada")), rowParams())
+        list.addView(option("Slideshow (apne aap badlo)", "slide", 0, listOf("Off", "1 minute", "5 minute", "15 minute", "30 minute")), rowParams())
+
         list.addView(section(""))
         list.addView(action("Sab default karo") {
             prefs.clear()
