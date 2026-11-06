@@ -44,48 +44,44 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            var currentScreen by remember { mutableStateOf("home") }
+            var screen by remember { mutableStateOf("home") }
 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color(0xFF0A0F1D))
             ) {
-                when (currentScreen) {
-                    "home" -> SimpleHomeScreen(
-                        onOpenSettings = { currentScreen = "settings" },
-                        onOpenControl = { currentScreen = "control" }
+                when (screen) {
+                    "home" -> HomeScreen(
+                        onSettings = { screen = "settings" },
+                        onControl = { screen = "control" }
                     )
-                    "settings" -> SimpleSettings(onBack = { currentScreen = "home" })
-                    "control" -> SimpleControl(onBack = { currentScreen = "home" })
+                    "settings" -> SettingsScreen(onBack = { screen = "home" })
+                    "control" -> ControlScreen(onBack = { screen = "home" })
                 }
             }
         }
     }
 }
 
-fun Modifier.glassBox(isFocused: Boolean): Modifier = this
+fun Modifier.boxStyle(focused: Boolean): Modifier = this
     .clip(RoundedCornerShape(20.dp))
-    .background(
-        if (isFocused) Color.White.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.12f)
-    )
+    .background(if (focused) Color.White.copy(0.3f) else Color.White.copy(0.12f))
     .border(
-        width = if (isFocused) 2.dp else 1.dp,
-        brush = Brush.verticalGradient(
-            listOf(Color.White.copy(alpha = 0.6f), Color.White.copy(alpha = 0.1f))
-        ),
+        width = if (focused) 2.dp else 1.dp,
+        brush = Brush.verticalGradient(listOf(Color.White.copy(0.6f), Color.White.copy(0.1f))),
         shape = RoundedCornerShape(20.dp)
     )
 
 @Composable
-fun SimpleHomeScreen(onOpenSettings: () -> Unit, onOpenControl: () -> Unit) {
+fun HomeScreen(onSettings: () -> Unit, onControl: () -> Unit) {
     val context = LocalContext.current
-    val apps = remember { loadApps(context) }
-    var timeStr by remember { mutableStateOf("") }
+    val apps = remember { loadUserApps(context) }
+    var timeText by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         while (true) {
-            timeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
+            timeText = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
             delay(10000)
         }
     }
@@ -102,11 +98,11 @@ fun SimpleHomeScreen(onOpenSettings: () -> Unit, onOpenControl: () -> Unit) {
         ) {
             Column {
                 Text("Good morning, Vinay", color = Color.White.copy(0.7f), fontSize = 16.sp)
-                Text(timeStr, color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+                Text(timeText, color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                TopButton("⚙️ Settings") { onOpenSettings() }
-                TopButton("🦊 Control") { onOpenControl() }
+                MenuButton("⚙️ Settings") { onSettings() }
+                MenuButton("🦊 Control") { onControl() }
             }
         }
 
@@ -115,42 +111,41 @@ fun SimpleHomeScreen(onOpenSettings: () -> Unit, onOpenControl: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .glassBox(false)
+                .boxStyle(false)
                 .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             apps.take(5).forEach { app ->
-                AppIconTile(app) { launchApp(context, app.packageName) }
+                AppTile(app) { launchUserApp(context, app.packageName) }
             }
         }
     }
 }
 
 @Composable
-fun TopButton(text: String, onClick: () -> Unit) {
+fun MenuButton(title: String, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier
-            .glassBox(focused)
+            .boxStyle(focused)
             .onFocusChanged { focused = it.isFocused }
             .clickable { onClick() }
             .focusable()
             .padding(horizontal = 20.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
-
 @Composable
-fun AppIconTile(app: AppItem, onClick: () -> Unit) {
+fun AppTile(app: AppItem, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.15f else 1f, tween(150))
+    val sc by animateFloatAsState(if (focused) 1.15f else 1f, tween(150))
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .scale(scale)
+            .scale(sc)
             .onFocusChanged { focused = it.isFocused }
             .clickable { onClick() }
             .focusable()
@@ -158,7 +153,7 @@ fun AppIconTile(app: AppItem, onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(width = 90.dp, height = 55.dp)
-                .glassBox(focused),
+                .boxStyle(focused),
             contentAlignment = Alignment.Center
         ) {
             val bmp = remember(app.packageName) { app.icon.toBitmap(64, 64).asImageBitmap() }
@@ -176,34 +171,34 @@ fun AppIconTile(app: AppItem, onClick: () -> Unit) {
 }
 
 @Composable
-fun SimpleSettings(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit) {
     BackHandler { onBack() }
     Box(modifier = Modifier.fillMaxSize().padding(50.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()) {
             Text("Settings Menu", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(20.dp))
-            TopButton("Back to Home") { onBack() }
+            MenuButton("Back to Home") { onBack() }
         }
     }
 }
 
 @Composable
-fun SimpleControl(onBack: () -> Unit) {
+fun ControlScreen(onBack: () -> Unit) {
     BackHandler { onBack() }
     Box(modifier = Modifier.fillMaxSize().padding(50.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()) {
             Text("Control Center", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(20.dp))
-            TopButton("Open WiFi Settings") {
+            MenuButton("Open WiFi Settings") {
                 LocalContext.current.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
             }
             Spacer(modifier = Modifier.height(10.dp))
-            TopButton("Back to Home") { onBack() }
+            MenuButton("Back to Home") { onBack() }
         }
     }
 }
 
-fun loadApps(context: Context): List<AppItem> {
+fun loadUserApps(context: Context): List<AppItem> {
     val pm = context.packageManager
     val list = mutableListOf<AppItem>()
     val seen = mutableSetOf<String>()
@@ -217,28 +212,7 @@ fun loadApps(context: Context): List<AppItem> {
     return list.sortedBy { it.name.lowercase() }
 }
 
-fun launchApp(context: Context, pkg: String) {
-    val intent = context.packageManager.getLaunchIntentForPackage(pkg)
-    intent?.let {
-        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(it)
-    }
-}
-fun loadApps(context: Context): List<AppItem> {
-    val pm = context.packageManager
-    val list = mutableListOf<AppItem>()
-    val seen = mutableSetOf<String>()
-    val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-    for (info in pm.queryIntentActivities(intent, 0)) {
-        val pkg = info.activityInfo.packageName
-        if (pkg != context.packageName && seen.add(pkg)) {
-            list.add(AppItem(info.loadLabel(pm).toString(), pkg, info.loadIcon(pm)))
-        }
-    }
-    return list.sortedBy { it.name.lowercase() }
-}
-
-fun launchApp(context: Context, pkg: String) {
+fun launchUserApp(context: Context, pkg: String) {
     val intent = context.packageManager.getLaunchIntentForPackage(pkg)
     intent?.let {
         it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
