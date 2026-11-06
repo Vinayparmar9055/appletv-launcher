@@ -1,13 +1,9 @@
 package com.vinay.appletvlauncher
 
-import android.Manifest
 import android.app.Activity
 import android.app.role.RoleManager
-import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -16,9 +12,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.os.Bundle
-import android.provider.MediaStore
 import android.provider.Settings
 import android.view.Gravity
 import android.view.KeyEvent
@@ -32,8 +26,6 @@ import android.widget.LinearLayout
 import android.widget.TextClock
 import android.widget.TextView
 import android.widget.Toast
-import java.io.File
-import java.io.FileOutputStream
 import java.util.Calendar
 
 class MainActivity : Activity() {
@@ -48,10 +40,9 @@ class MainActivity : Activity() {
     private lateinit var greetingTv: TextView
     private lateinit var wallpaperView: ImageView
     private lateinit var prefs: Prefs
+    private lateinit var wall: WallpaperUi
     private var overlay: FrameLayout? = null
     private var settingsOpen = false
-    private val PERM = 77
-    private val wpFile by lazy { File(filesDir, "wallpaper.jpg") }
 
     private var th: Th = THEMES[0]
     private var accent: Int = ACCENTS[0]
@@ -72,11 +63,13 @@ class MainActivity : Activity() {
         accent = ACCENTS[gi("accent", 0).coerceIn(0, ACCENTS.size - 1)]
         cardR = pick("round", 1, 14, 28, 44)
         tileR = pick("round", 1, 8, 18, 30)
+        if (::wall.isInitialized) wall.accent = accent
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        wall = WallpaperUi(this, prefs, { v, f -> showOverlay(v, f) }, { hideOverlay() })
         loadTheme()
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
                 or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
@@ -106,11 +99,17 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         updateGreeting()
+        wall.restartSlideshow()
         if (overlay == null) loadApps()
     }
 
+    override fun onPause() {
+        super.onPause()
+        wall.stopSlideshow()
+    }
+
     private fun dismissOverlay() {
-        if (settingsOpen) closeSettings() else hidePicker()
+        if (settingsOpen) closeSettings() else hideOverlay()
     }
 
     @Deprecated("Deprecated in Java")
@@ -119,6 +118,7 @@ class MainActivity : Activity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (wall.editorOpen && wall.handleKey(keyCode, event?.repeatCount ?: 0)) return true
         if (keyCode == KeyEvent.KEYCODE_MENU && overlay == null) {
             showSettings()
             return true
@@ -132,6 +132,17 @@ class MainActivity : Activity() {
         if (::scroll.isInitialized) {
             scroll.smoothScrollTo(0, 0)
             row.getChildAt(0)?.requestFocus()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == WallpaperUi.PERM) {
+            wall.onPermission(
+                grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            )
         }
     }
 
@@ -178,9 +189,10 @@ class MainActivity : Activity() {
 
         wallpaperView = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         root.addView(wallpaperView, FrameLayout.LayoutParams(-1, -1))
-        val dim = View(this).apply { setBackgroundColor(th.dim) }
+        val dimA = pick("wpdim", 2, 0, 40, 70, 110, 160)
+        val dim = View(this).apply { setBackgroundColor(wa(th.dim, dimA)) }
         root.addView(dim, FrameLayout.LayoutParams(-1, -1))
-        applyWallpaper()
+        wall.attach(wallpaperView)
 
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -192,7 +204,6 @@ class MainActivity : Activity() {
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(top, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        // Left card: greeting, time, date
         val left = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
@@ -225,7 +236,6 @@ class MainActivity : Activity() {
         left.addView(date)
         top.addView(left, LinearLayout.LayoutParams(0, -1, 1.3f).apply { rightMargin = dp(topGap) })
 
-        // Middle card: analog clock
         val clockCard = FrameLayout(this).apply {
             background = glass(cardR, 40)
             visibility = if (gi("clock", 0) == 2) View.GONE else View.VISIBLE
@@ -240,21 +250,13 @@ class MainActivity : Activity() {
         clockCard.addView(analog, FrameLayout.LayoutParams(dp(200), dp(200), Gravity.CENTER))
         top.addView(clockCard, LinearLayout.LayoutParams(0, -1, 0.9f).apply { rightMargin = dp(topGap) })
 
-        // Wallpaper card
         val wp = makeCard(
-            android.R.drawable.ic_menu_gallery, "Wallpaper badlo",
-            "OK: photo chuno  |  OK lamba: hatao", "Wallpaper"
+            android.R.drawable.ic_menu_gallery, "Wallpaper",
+            "OK dabao: photo lagao / badlo", "Wallpaper"
         )
-        wp.setOnClickListener { openPicker() }
-        wp.setOnLongClickListener {
-            wpFile.delete()
-            applyWallpaper()
-            Toast.makeText(this, "Wallpaper hata diya", Toast.LENGTH_SHORT).show()
-            true
-        }
+        wp.setOnClickListener { wall.openManager() }
         top.addView(wp, LinearLayout.LayoutParams(0, -1, 0.9f).apply { rightMargin = dp(topGap) })
 
-        // Settings card
         val st = makeCard(
             android.R.drawable.ic_menu_preferences, "Settings",
             "OK dabao (ya remote ka Menu)", "Settings"
@@ -262,7 +264,6 @@ class MainActivity : Activity() {
         st.setOnClickListener { showSettings() }
         top.addView(st, LinearLayout.LayoutParams(0, -1, 0.7f))
 
-        // Dock
         val dockBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = glass(cardR + 4, 35)
@@ -330,18 +331,32 @@ class MainActivity : Activity() {
         return card
     }
 
-    private fun showSettings() {
+    private fun showOverlay(content: View, focus: View?) {
         val ov = FrameLayout(this).apply {
-            setBackgroundColor(Color.argb(245, 8, 8, 28))
+            setBackgroundColor(Color.argb(240, 8, 8, 28))
             isClickable = true
         }
-        val panel = SettingsPanel(this, prefs, accent) { closeSettings() }
-        ov.addView(panel.build(), FrameLayout.LayoutParams(dp(760), -1, Gravity.CENTER_HORIZONTAL))
+        ov.addView(content, FrameLayout.LayoutParams(-1, -1))
         mainCol.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
         rootFrame.addView(ov, FrameLayout.LayoutParams(-1, -1))
         overlay = ov
+        focus?.requestFocus()
+    }
+
+    private fun hideOverlay() {
+        overlay?.let { rootFrame.removeView(it) }
+        overlay = null
+        wall.overlayClosed()
+        mainCol.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        row.getChildAt(0)?.requestFocus()
+    }
+
+    private fun showSettings() {
+        val panel = SettingsPanel(this, prefs, accent) { closeSettings() }
+        val holder = FrameLayout(this)
+        holder.addView(panel.build(), FrameLayout.LayoutParams(dp(760), -1, Gravity.CENTER_HORIZONTAL))
+        showOverlay(holder, panel.first)
         settingsOpen = true
-        panel.first?.requestFocus()
     }
 
     private fun closeSettings() {
@@ -351,6 +366,7 @@ class MainActivity : Activity() {
         setContentView(buildUi())
         updateGreeting()
         loadApps()
+        wall.restartSlideshow()
     }
 
     private fun queryApps(category: String): List<android.content.pm.ResolveInfo> {
@@ -381,163 +397,6 @@ class MainActivity : Activity() {
         row.getChildAt(0)?.requestFocus()
     }
 
-    private fun applyWallpaper() {
-        if (wpFile.exists()) {
-            val bmp = BitmapFactory.decodeFile(wpFile.absolutePath)
-            if (bmp != null) { wallpaperView.setImageBitmap(bmp); return }
-        }
-        wallpaperView.setImageDrawable(null)
-    }
-
-    private fun decodeSampled(uri: Uri, target: Int): Bitmap? {
-        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, o) }
-        var s = 1
-        while (o.outWidth / (s * 2) >= target) s *= 2
-        val o2 = BitmapFactory.Options().apply { inSampleSize = s }
-        return contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, o2) }
-    }
-
-    private fun saveWallpaper(uri: Uri) {
-        try {
-            val bmp = decodeSampled(uri, 1920)
-            if (bmp == null) {
-                Toast.makeText(this, "Photo khul nahi payi", Toast.LENGTH_LONG).show()
-                return
-            }
-            FileOutputStream(wpFile).use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-            applyWallpaper()
-        } catch (e: Exception) {
-            Toast.makeText(this, "Wallpaper lagane me dikkat aayi", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun openPicker() {
-        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), PERM)
-        } else {
-            showPicker()
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERM && grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED
-        ) {
-            showPicker()
-        } else {
-            Toast.makeText(this, "Photo dekhne ki permission nahi mili", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun showPicker() {
-        val uris = ArrayList<Uri>()
-        try {
-            contentResolver.query(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Images.Media._ID),
-                null, null,
-                MediaStore.Images.Media.DATE_ADDED + " DESC"
-            )?.use { c ->
-                val idx = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-                while (c.moveToNext() && uris.size < 30) {
-                    uris.add(
-                        ContentUris.withAppendedId(
-                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, c.getLong(idx)
-                        )
-                    )
-                }
-            }
-        } catch (e: Exception) {
-        }
-        if (uris.isEmpty()) {
-            Toast.makeText(
-                this, "TV me koi photo nahi mili. Send Files to TV se photo bhejo.",
-                Toast.LENGTH_LONG
-            ).show()
-            return
-        }
-
-        val ov = FrameLayout(this).apply {
-            setBackgroundColor(Color.argb(240, 8, 8, 28))
-            isClickable = true
-        }
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-        }
-        val title = TextView(this).apply {
-            text = "Wallpaper ke liye photo chuno (OK dabao, wapas jane ke liye Back)"
-            setTextColor(Color.WHITE)
-            textSize = 24f
-            gravity = Gravity.CENTER
-            setPadding(dp(24), 0, dp(24), dp(24))
-        }
-        box.addView(title)
-        val hs = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            clipChildren = false
-            clipToPadding = false
-        }
-        val pr = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            clipChildren = false
-            setPadding(dp(40), dp(24), dp(40), dp(24))
-        }
-        for (u in uris) {
-            val img = ImageView(this).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                isFocusable = true
-                isClickable = true
-                background = glass(14, 30)
-                clipToOutline = true
-                outlineProvider = object : ViewOutlineProvider() {
-                    override fun getOutline(v: View, o: Outline) {
-                        o.setRoundRect(0, 0, v.width, v.height, dp(14).toFloat())
-                    }
-                }
-            }
-            img.layoutParams = LinearLayout.LayoutParams(dp(280), dp(158)).apply {
-                leftMargin = dp(10); rightMargin = dp(10)
-            }
-            Thread {
-                val b = try { decodeSampled(u, 400) } catch (e: Exception) { null }
-                runOnUiThread { if (b != null) img.setImageBitmap(b) }
-            }.start()
-            img.setOnFocusChangeListener { v, has ->
-                val s = if (has) 1.15f else 1f
-                v.animate().scaleX(s).scaleY(s).setDuration(150).start()
-                v.elevation = if (has) dp(16).toFloat() else 0f
-                if (has) hs.smoothScrollTo(v.left - (hs.width - v.width) / 2, 0)
-            }
-            img.setOnClickListener {
-                saveWallpaper(u)
-                hidePicker()
-            }
-            pr.addView(img)
-        }
-        hs.addView(pr)
-        box.addView(hs, LinearLayout.LayoutParams(-1, -2))
-        ov.addView(box, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
-
-        mainCol.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-        rootFrame.addView(ov, FrameLayout.LayoutParams(-1, -1))
-                overlay = ov
-        pr.getChildAt(0)?.requestFocus()
-    }
-
-    private fun hidePicker() {
-        overlay?.let { rootFrame.removeView(it) }
-        overlay = null
-        mainCol.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-        row.getChildAt(0)?.requestFocus()
-    }
-
     private fun makeTile(item: AppItem): View {
         val tile = FrameLayout(this).apply {
             isFocusable = true
@@ -562,7 +421,8 @@ class MainActivity : Activity() {
         tile.addView(img, FrameLayout.LayoutParams(-1, -1))
 
         tile.layoutParams = LinearLayout.LayoutParams(dp(tileW), dp(tileH)).apply {
-            leftMargin = dp(cgap); rightMargin = dp(cgap)
+            leftMargin = dp(cgap)
+            rightMargin = dp(cgap)
         }
 
         tile.setOnFocusChangeListener { v, has ->
@@ -584,4 +444,3 @@ class MainActivity : Activity() {
         return tile
     }
 }
-  
